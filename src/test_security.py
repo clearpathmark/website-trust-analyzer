@@ -1,20 +1,19 @@
 import asyncio
 from analyzers.website_security import WebsiteSecurityAnalyzer
 
-async def test_security_analyzer():
+async def main():
     analyzer = WebsiteSecurityAnalyzer()
+    url = "github.com"
+    print(f"Analyzing security for: {url}")
     
-    # Test with a known secure website
-    test_url = "github.com"  # Replace with your test URL
+    # Run the analysis
+    results = await analyzer.analyze(url)
     
-    print(f"Analyzing security for: {test_url}")
-    results = await analyzer.analyze(test_url)
-    
-    # Print results
+    # Print results in a structured way
     print("\nAnalysis Results:")
-    print("----------------")
+    print("-" * 50)
     for key, value in results.items():
-        print(f"\n{key}:")
+        print(f"\n{key.upper()}:")
         if isinstance(value, dict):
             for k, v in value.items():
                 print(f"  {k}: {v}")
@@ -22,4 +21,4 @@ async def test_security_analyzer():
             print(f"  {value}")
 
 if __name__ == "__main__":
-    asyncio.run(test_security_analyzer())
+    asyncio.run(main())
