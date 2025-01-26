@@ -5,8 +5,6 @@ from analyzers.content_expertise import ContentExpertiseAnalyzer
 from analyzers.scoring import TrustScore
 
 class TrustAnalyzer:
-    """Main analyzer that combines all components and produces a trust score"""
-    
     def __init__(self):
         self.security_analyzer = WebsiteSecurityAnalyzer()
         self.social_analyzer = SocialProofAnalyzer()
@@ -14,15 +12,7 @@ class TrustAnalyzer:
         self.scorer = TrustScore()
         
     async def analyze(self, url: str) -> Dict:
-        """
-        Perform comprehensive trust analysis of a website
-        
-        Args:
-            url: Website URL to analyze
-            
-        Returns:
-            Dict containing analysis results and trust score
-        """
+        """Perform comprehensive trust analysis of a website"""
         # Run all analyzers
         security_results = await self.security_analyzer.analyze(url)
         social_results = await self.social_analyzer.analyze(url)
@@ -44,7 +34,10 @@ class TrustAnalyzer:
             transparency_data
         )
         
-        # Combine all results
+        # Add detailed review diversity information to the results
+        if 'review_diversity' in social_results:
+            trust_score['review_diversity_details'] = social_results['review_diversity']
+        
         return {
             'url': url,
             'trust_score': trust_score,
@@ -63,14 +56,38 @@ class TrustAnalyzer:
         }
     
     def _map_review_data(self, social_results: Dict) -> Dict:
-        """Map social proof analyzer results to review scoring format"""
+        """Map social proof analyzer results to review scoring format with enhanced diversity metrics"""
         testimonials = social_results.get('testimonials', {})
         review_presence = social_results.get('review_presence', {})
+        review_diversity = social_results.get('review_diversity', {})
+        
+        # Calculate review strength based on multiple factors
+        has_reviews = testimonials.get('has_testimonials', False) or review_presence.get('has_reviews', False)
+        recent_reviews = bool(testimonials.get('testimonial_urls', []))
+        
+        # New diversity metrics
+        diversity_score = review_diversity.get('diversity_score', 0)
+        primary_sources = len(review_diversity.get('primary_sources', []))
+        total_sources = review_diversity.get('total_sources', 0)
+        has_embedded_widgets = bool(review_diversity.get('embedded_widgets', []))
+        
+        # Determine review diversity based on enhanced metrics
+        diverse_reviews = (
+            total_sources >= 3 or  # Has multiple review sources
+            (primary_sources >= 2 and has_embedded_widgets) or  # Has major platforms and widgets
+            diversity_score >= 7.0  # High diversity score
+        )
         
         return {
-            'has_reviews': testimonials.get('has_testimonials', False) or review_presence.get('has_reviews', False),
-            'recent_reviews': True if testimonials.get('testimonial_urls', []) else False,
-            'diverse_reviews': len(review_presence.get('platforms_found', [])) > 1
+            'has_reviews': has_reviews,
+            'recent_reviews': recent_reviews,
+            'diverse_reviews': diverse_reviews,
+            'review_metrics': {
+                'diversity_score': diversity_score,
+                'primary_sources': primary_sources,
+                'total_sources': total_sources,
+                'has_widgets': has_embedded_widgets
+            }
         }
     
     def _map_business_data(self, security_results: Dict, social_results: Dict) -> Dict:
