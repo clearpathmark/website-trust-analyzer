@@ -1,6 +1,6 @@
 import ssl
 import socket
-import requests
+import aiohttp
 from urllib.parse import urlparse
 from typing import Dict, List, Optional
 
@@ -27,20 +27,21 @@ class WebsiteSecurityAnalyzer:
             if not url.startswith(('http://', 'https://')):
                 url = 'https://' + url
                 
-            results = {
-                'url': url,
-                'ssl_certificate': await self._check_ssl(url),
-                'privacy_policy': await self._check_privacy_policy(url),
-                'contact_info': await self._check_contact_info(url),
-                'security_headers': await self._check_security_headers(url)
-            }
-            
-            return results
-            
+            async with aiohttp.ClientSession() as session:
+                results = {
+                    'url': url,
+                    'ssl_certificate': await self._check_ssl(url),
+                    'privacy_policy': await self._check_privacy_policy(session, url),
+                    'contact_info': await self._check_contact_info(session, url),
+                    'security_headers': await self._check_security_headers(session, url)
+                }
+                
+                return results
+                
         except Exception as e:
             return {
                 'url': url,
-                'error': str(e),
+                'error': f"Analysis failed: {str(e)}",
                 'status': 'failed'
             }
     
@@ -67,71 +68,74 @@ class WebsiteSecurityAnalyzer:
                 'error': str(e)
             }
     
-    async def _check_privacy_policy(self, url: str) -> Dict:
+    async def _check_privacy_policy(self, session: aiohttp.ClientSession, url: str) -> Dict:
         """Check for presence of privacy policy"""
         common_paths = [
-            '/privacy-policy',
             '/privacy',
+            '/privacy-policy',
             '/privacy-notice',
-            '/datenschutz'  # German
+            '/legal/privacy'
         ]
         
         results = {
             'has_privacy_policy': False,
-            'policy_urls': []
+            'policy_urls': [],
+            'status': 'checked'
         }
         
         for path in common_paths:
             try:
                 full_url = url.rstrip('/') + path
-                response = requests.head(full_url, headers=self.headers, allow_redirects=True)
-                if response.status_code == 200:
-                    results['has_privacy_policy'] = True
-                    results['policy_urls'].append(full_url)
-            except:
+                async with session.head(full_url, allow_redirects=True) as response:
+                    if response.status == 200:
+                        results['has_privacy_policy'] = True
+                        results['policy_urls'].append(full_url)
+            except Exception as e:
                 continue
                 
         return results
     
-    async def _check_contact_info(self, url: str) -> Dict:
+    async def _check_contact_info(self, session: aiohttp.ClientSession, url: str) -> Dict:
         """Check for presence of contact information"""
         common_paths = [
             '/contact',
             '/contact-us',
-            '/about-us',
-            '/about'
+            '/about',
+            '/about-us'
         ]
         
         results = {
             'has_contact_page': False,
-            'contact_urls': []
+            'contact_urls': [],
+            'status': 'checked'
         }
         
         for path in common_paths:
             try:
                 full_url = url.rstrip('/') + path
-                response = requests.head(full_url, headers=self.headers, allow_redirects=True)
-                if response.status_code == 200:
-                    results['has_contact_page'] = True
-                    results['contact_urls'].append(full_url)
-            except:
+                async with session.head(full_url, allow_redirects=True) as response:
+                    if response.status == 200:
+                        results['has_contact_page'] = True
+                        results['contact_urls'].append(full_url)
+            except Exception as e:
                 continue
                 
         return results
         
-    async def _check_security_headers(self, url: str) -> Dict:
+    async def _check_security_headers(self, session: aiohttp.ClientSession, url: str) -> Dict:
         """Check security-related HTTP headers"""
         try:
-            response = requests.head(url, headers=self.headers)
-            headers = response.headers
-            
-            return {
-                'has_hsts': 'Strict-Transport-Security' in headers,
-                'has_xframe': 'X-Frame-Options' in headers,
-                'has_content_security': 'Content-Security-Policy' in headers,
-                'has_xss_protection': 'X-XSS-Protection' in headers
-            }
+            async with session.head(url) as response:
+                headers = response.headers
+                return {
+                    'has_hsts': 'Strict-Transport-Security' in headers,
+                    'has_xframe': 'X-Frame-Options' in headers,
+                    'has_content_security': 'Content-Security-Policy' in headers,
+                    'has_xss_protection': 'X-XSS-Protection' in headers,
+                    'status': 'checked'
+                }
         except Exception as e:
             return {
-                'error': str(e)
+                'error': str(e),
+                'status': 'failed'
             }
